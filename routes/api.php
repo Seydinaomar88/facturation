@@ -6,6 +6,13 @@ use App\Http\Controllers\FactureController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\QuincaillerieController;
 
+Route::get('/ping', function () {
+    return response()->json([
+        'status' => 'ok',
+        'env' => app()->environment()
+    ]);
+});
+
 // AUTH
 Route::post('/login', [AuthController::class, 'login']);
 Route::post('/register', [AuthController::class, 'register']);
