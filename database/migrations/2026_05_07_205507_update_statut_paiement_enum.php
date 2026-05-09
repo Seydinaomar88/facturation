@@ -1,27 +1,26 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\Schema\Blueprint;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        DB::statement("
-            ALTER TABLE factures
-            MODIFY statut_paiement
-            ENUM('PAYE', 'PARTIEL', 'NON_PAYE')
-            DEFAULT 'NON_PAYE'
-        ");
+        Schema::table('factures', function (Blueprint $table) {
+            $table->string('statut_paiement')
+                ->default('NON_PAYE')
+                ->change();
+        });
     }
 
     public function down(): void
     {
-        DB::statement("
-            ALTER TABLE factures
-            MODIFY statut_paiement
-            ENUM('PAYE', 'NON_PAYE')
-            DEFAULT 'NON_PAYE'
-        ");
+        Schema::table('factures', function (Blueprint $table) {
+            $table->string('statut_paiement')
+                ->default('NON_PAYE')
+                ->change();
+        });
     }
 };
