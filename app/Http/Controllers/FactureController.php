@@ -13,145 +13,106 @@ class FactureController extends Controller
 {
     //  CREER FACTURE 
     public function store(Request $request)
-    {
-        $request->validate([
+{
+    $request->validate([
 
-            'client_id' => 'required|exists:clients,id',
+        'client_id' => 'required|exists:clients,id',
+        'montant_paye' => 'required|numeric|min:0',
+        'statut_livraison' => 'nullable|in:LIVRE,NON_LIVRE',
 
-            'montant_paye' => 'required|numeric|min:0',
+        'produits' => 'required|array|min:1',
+        'produits.*.nom_produit' => 'required|string',
+        'produits.*.quantite' => 'required|integer|min:1',
+        'produits.*.prix_unitaire' => 'required|integer|min:1',
 
-            'statut_livraison' => 'nullable|in:LIVRE,NON_LIVRE',
+    ]);
 
-            'produits' => 'required|array|min:1',
+    DB::beginTransaction();
 
-            'produits.*.nom_produit' => 'required|string',
+    try {
 
-            'produits.*.quantite' => 'required|integer|min:1',
+        // USER SAFE (IMPORTANT)
+        $user = Auth::user();
 
-            'produits.*.prix_unitaire' => 'required|integer|min:1',
+        if (!$user) {
+            return response()->json([
+                'message' => 'Non authentifié'
+            ], 401);
+        }
 
+        // CALCUL TOTAL
+        $total = 0;
+
+        foreach ($request->produits as $produit) {
+            $total += $produit['quantite'] * $produit['prix_unitaire'];
+        }
+
+        // SECURITE
+        if ($request->montant_paye > $total) {
+            return response()->json([
+                'message' => 'Le montant payé ne peut pas dépasser le total'
+            ], 422);
+        }
+
+        // RESTE
+        $reste = $total - $request->montant_paye;
+
+        // STATUT PAIEMENT
+        if ($request->montant_paye == 0) {
+            $statutPaiement = 'NON_PAYE';
+        } elseif ($request->montant_paye < $total) {
+            $statutPaiement = 'PARTIEL';
+        } else {
+            $statutPaiement = 'PAYE';
+        }
+
+        // STATUT GLOBAL
+        $statut = $reste > 0 ? 'DETTE' : 'SOLDE';
+
+        // FACTURE CREATE
+        $facture = Facture::create([
+
+            'client_id' => $request->client_id,
+
+            //  FIX ICI
+            'quincaillerie_id' => $user->quincaillerie_id,
+
+            'total' => $total,
+            'montant_paye' => $request->montant_paye,
+            'reste_a_payer' => $reste,
+            'statut' => $statut,
+            'statut_paiement' => $statutPaiement,
+            'statut_livraison' => $request->statut_livraison ?? 'NON_LIVRE',
         ]);
 
-        DB::beginTransaction();
-
-        try {
-
-            //  CALCUL TOTAL 
-
-            $total = 0;
-
-            foreach ($request->produits as $produit) {
-
-                $total += (
-                    $produit['quantite']
-                    * $produit['prix_unitaire']
-                );
-            }
-
-            // SECURITE 
-
-            if ($request->montant_paye > $total) {
-
-                return response()->json([
-                    'message' => 'Le montant payé ne peut pas dépasser le total'
-                ], 422);
-            }
-
-            //ALCUL RESTE 
-
-            $reste = $total - $request->montant_paye;
-
-            //STATUT PAIEMENT
-
-            if ($request->montant_paye == 0) {
-
-                $statutPaiement = 'NON_PAYE';
-
-            } elseif ($request->montant_paye < $total) {
-
-                $statutPaiement = 'PARTIEL';
-
-            } else {
-
-                $statutPaiement = 'PAYE';
-            }
-
-            //STATUT GLOBAL
-
-            $statut = $reste > 0
-                ? 'DETTE'
-                : 'SOLDE';
-
-            //CREATION FACTURE 
-
-            $facture = Facture::create([
-
-                'client_id' => $request->client_id,
-
-                'quincaillerie_id' => Auth::user()->quincaillerie_id,
-
-                'total' => $total,
-
-                'montant_paye' => $request->montant_paye,
-
-                'reste_a_payer' => $reste,
-
-                'statut' => $statut,
-
-                'statut_paiement' => $statutPaiement,
-
-                'statut_livraison' =>
-                    $request->statut_livraison
-                    ?? 'NON_LIVRE',
+        // DETAILS
+        foreach ($request->produits as $produit) {
+            DetailFacture::create([
+                'facture_id' => $facture->id,
+                'nom_produit' => $produit['nom_produit'],
+                'quantite' => $produit['quantite'],
+                'prix_unitaire' => $produit['prix_unitaire'],
+                'total' => $produit['quantite'] * $produit['prix_unitaire']
             ]);
-
-            //DETAILS FACTURE 
-
-            foreach ($request->produits as $produit) {
-
-                DetailFacture::create([
-
-                    'facture_id' => $facture->id,
-
-                    'nom_produit' => $produit['nom_produit'],
-
-                    'quantite' => $produit['quantite'],
-
-                    'prix_unitaire' => $produit['prix_unitaire'],
-
-                    'total' => (
-                        $produit['quantite']
-                        * $produit['prix_unitaire']
-                    )
-                ]);
-            }
-
-            DB::commit();
-
-            return response()->json([
-
-                'message' => 'Facture créée avec succès',
-
-                'facture' => $facture->load(
-                    'client',
-                    'details'
-                )
-
-            ], 201);
-
-        } catch (\Exception $e) {
-
-            DB::rollBack();
-
-            return response()->json([
-
-                'message' => 'Erreur lors de la création',
-
-                'error' => $e->getMessage()
-
-            ], 500);
         }
+
+        DB::commit();
+
+        return response()->json([
+            'message' => 'Facture créée avec succès',
+            'facture' => $facture->load('client', 'details')
+        ], 201);
+
+    } catch (\Exception $e) {
+
+        DB::rollBack();
+
+        return response()->json([
+            'message' => 'Erreur lors de la création',
+            'error' => $e->getMessage()
+        ], 500);
     }
+}
 
     // LISTE FACTURES
     public function index(Request $request)
