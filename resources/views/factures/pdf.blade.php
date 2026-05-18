@@ -183,7 +183,7 @@
 
 <!-- FOOTER -->
 <div class="footer">
-    Merci pour votre confiance 🙏
+    Merci pour votre confiance 
 </div>
 
 </body>
