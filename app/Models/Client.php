@@ -9,7 +9,12 @@ class Client extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['nom', 'telephone'];
+    protected $fillable = ['nom', 'telephone', 'quincaillerie_id'];
+
+    public function quincaillerie()
+    {
+        return $this->belongsTo(Quincaillerie::class);
+    }
 
     public function factures()
     {
